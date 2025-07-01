@@ -4,6 +4,7 @@ import random
 import sys
 import time
 import pygame as pg
+from math import atan2, degrees
 
 
 WIDTH = 1100  # ゲームウィンドウの幅
@@ -242,6 +243,42 @@ class Score:
         screen.blit(self.image, self.rect)
 
 
+class Shield(pg.sprite.Sprite):
+    def __init__(self, life: int, koukaton):
+        super().__init__()
+        self.life = life
+
+        # 手順1：空のSurfaceを作成（幅×高さ）
+        width = 20
+        height = koukaton.rect.height * 2
+        self.image = pg.Surface((width,height))
+
+        # 手順2：黒枠などなく、単純な青長方形
+        pg.draw.rect(self.image, (0, 0, 255), (0, 0, width, height))  # 青い長方形
+
+        # 手順3：こうかとんの向きを取得
+        vx, vy = koukaton.dire  # こうかとんが持つ向きベクトル
+
+        # 手順4：角度を求める（atan2の引数はy, xの順）
+        angle = degrees(atan2(-vy, vx))  # pygameは上が-yなので符号を反転
+
+        # 手順5：回転させる
+        self.image = pg.transform.rotozoom(self.image, angle, 1.0)
+        self.rect = self.image.get_rect()
+
+        self.image.set_colorkey((0,0,0))  #黒いところを透明
+    
+        # 手順6：こうかとんの前方にずらして配置（方向に1体分ずらす）
+        offset = koukaton.rect.width  # こうかとん1体分
+        self.rect.centerx = koukaton.rect.centerx + vx * offset
+        self.rect.centery = koukaton.rect.centery + vy * offset
+
+    def update(self):
+        self.life -= 1
+        if self.life <= 0:
+            self.kill()  # シールドをグループから削除（消える）
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -253,6 +290,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    shields = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -288,6 +326,15 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
+        
+        # シールド発動条件（Sキー & スコア50以上 & シールド未存在）
+        if key_lst[pg.K_s] and score.value >= 50 and len(shields) == 0:
+            shield_life = 400
+            shields.add(Shield(shield_life, bird))
+            score.value -= 50
+        
+        for bomb in pg.sprite.groupcollide(bombs, shields, True, False).keys():
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
 
         bird.update(key_lst, screen)
         beams.update()
@@ -298,6 +345,8 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        shields.update()
+        shields.draw(screen)
         score.update(screen)
         pg.display.update()
         tmr += 1
