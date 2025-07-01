@@ -4,7 +4,6 @@ import random
 import sys
 import time
 import pygame as pg
-from math import atan2, degrees
 
 
 WIDTH = 1100  # ゲームウィンドウの幅
@@ -244,6 +243,9 @@ class Score:
 
 
 class Shield(pg.sprite.Sprite):
+    """
+    こうかとんの向いている方向に壁を生成
+    """
     def __init__(self, life: int, koukaton):
         super().__init__()
         self.life = life
@@ -260,7 +262,7 @@ class Shield(pg.sprite.Sprite):
         vx, vy = koukaton.dire  # こうかとんが持つ向きベクトル
 
         # 手順4：角度を求める（atan2の引数はy, xの順）
-        angle = degrees(atan2(-vy, vx))  # pygameは上が-yなので符号を反転
+        angle = math.degrees(math.atan2(-vy, vx))  # pygameは上が-yなので符号を反転
 
         # 手順5：回転させる
         self.image = pg.transform.rotozoom(self.image, angle, 1.0)
