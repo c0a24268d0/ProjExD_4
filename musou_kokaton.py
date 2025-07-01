@@ -72,6 +72,8 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = xy
         self.speed = 10
+        self.state = "normal"  # 追加機能4: こうかとんの状態 (normal / hyper)
+        self.hyper_life = 0    # 追加機能4: 無敵状態の残りフレーム数
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -98,7 +100,21 @@ class Bird(pg.sprite.Sprite):
             self.rect.move_ip(-self.speed*sum_mv[0], -self.speed*sum_mv[1])
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
             self.dire = tuple(sum_mv)
-            self.image = self.imgs[self.dire]
+            # 無敵状態が終了したら元の画像に戻すため、ここでオリジナルの画像を保持
+            if self.state == "normal":
+                self.image = self.imgs[self.dire] 
+        
+        # ▼ 追加機能4：無敵状態の処理 ▼
+        if self.state == "hyper":
+            self.hyper_life -= 1
+            # 無敵状態中は画像をラプラシアンフィルタで加工
+            self.image = pg.transform.laplacian(self.imgs[self.dire]) 
+            if self.hyper_life < 0:
+                self.state = "normal"
+                # 無敵状態終了時に画像を元に戻す
+                self.image = self.imgs[self.dire] 
+        # ▲ 追加機能4：無敵状態の処理 ▲
+
         screen.blit(self.image, self.rect)
 
 
@@ -141,20 +157,36 @@ class Beam(pg.sprite.Sprite):
     """
     ビームに関するクラス
     """
-    def __init__(self, bird: Bird):
+    def __init__(self, bird: Bird, angle0: float = 0): 
         """
         ビーム画像Surfaceを生成する
         引数 bird：ビームを放つこうかとん
+        引数 angle0：ビームの回転角度（デフォルト0）
         """
         super().__init__()
-        self.vx, self.vy = bird.dire
-        angle = math.degrees(math.atan2(-self.vy, self.vx))
-        self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), angle, 1.0)
-        self.vx = math.cos(math.radians(angle))
-        self.vy = -math.sin(math.radians(angle))
+        
+        # ▼ 最終的な修正箇所 ▼
+        # こうかとんの現在の向きから基本となる角度を計算
+        # atan2(y, x)を使用し、Pygameのy軸は下方向が正なので、y成分は反転させる
+        base_angle_rad = math.atan2(-bird.dire[1], bird.dire[0])
+        base_angle_deg = math.degrees(base_angle_rad)
+        
+        # 基本角度に弾幕のオフセット角度を加算
+        final_angle_deg = base_angle_deg + angle0
+        
+        # ビーム画像の回転
+        self.image = pg.transform.rotozoom(pg.image.load(f"fig/beam.png"), final_angle_deg, 1.0)
+        
+        # ビームの移動方向ベクトルを計算
+        # ここで最終的な角度 (final_angle_deg) を使用することが重要です
+        self.vx = math.cos(math.radians(final_angle_deg))
+        self.vy = -math.sin(math.radians(final_angle_deg)) # PygameのY軸は下方向が正なので、sinに-を付ける
+        # ▲ 最終的な修正箇所ここまで ▲
+        
         self.rect = self.image.get_rect()
-        self.rect.centery = bird.rect.centery+bird.rect.height*self.vy
-        self.rect.centerx = bird.rect.centerx+bird.rect.width*self.vx
+        # ビームの初期位置をこうかとんの進行方向の少し先に設定
+        self.rect.centery = bird.rect.centery + bird.rect.height * self.vy
+        self.rect.centerx = bird.rect.centerx + bird.rect.width * self.vx
         self.speed = 10
 
     def update(self):
@@ -165,6 +197,41 @@ class Beam(pg.sprite.Sprite):
         self.rect.move_ip(self.speed*self.vx, self.speed*self.vy)
         if check_bound(self.rect) != (True, True):
             self.kill()
+
+
+# ▼ 追加機能6：弾幕発射のためのクラス ▼
+class NeoBeam:
+    """
+    複数のビームを生成するクラス
+    """
+    def __init__(self, bird: Bird, num: int):
+        """
+        複数のビームを生成するための初期化
+        引数1 bird：ビームを放つこうかとん
+        引数2 num：生成するビームの数
+        """
+        self.bird = bird
+        self.num = num
+
+    def gen_beams(self) -> list[Beam]:
+        """
+        指定された数のビームを生成し、リストとして返す
+        戻り値：生成されたBeamインスタンスのリスト
+        """
+        beams = []
+        if self.num > 1:
+            step = 100 / (self.num - 1)  # float除算に変更
+        else:
+            step = 0 # ビームが1つの場合はステップ不要
+
+        for i in range(self.num):
+            if self.num == 1:
+                angle0 = 0
+            else:
+                angle0 = -50 + i * step
+            beams.append(Beam(self.bird, angle0)) # Here, angle0 is passed
+        return beams
+# ▲ 追加機能6：弾幕発射のためのクラス ▲
 
 
 class Explosion(pg.sprite.Sprite):
@@ -256,13 +323,31 @@ def main():
 
     tmr = 0
     clock = pg.time.Clock()
+    score.value = 500
     while True:
         key_lst = pg.key.get_pressed()
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return 0
+            # ▼ 通常ビームの発射 ▼
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
-                beams.add(Beam(bird))
+                # ▼ 追加機能6：左Shiftキーを押しながらスペースキーで弾幕発射 ▼
+                if key_lst[pg.K_LSHIFT]:
+                    neo_beam = NeoBeam(bird, 5) # ビーム数5の弾幕
+                    beams.add(*neo_beam.gen_beams()) # リストを展開して追加
+                else:
+                    beams.add(Beam(bird))
+            # ▲ 追加機能6：弾幕発射のための処理 ▲
+
+            # ▼ 追加機能4：無敵状態の発動処理 ▼
+            if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT and score.value >= 100:
+                # 無敵状態ではない場合のみ発動
+                if bird.state == "normal": 
+                    score.value -= 100
+                    bird.state = "hyper"
+                    bird.hyper_life = 500 # 500フレーム無敵
+            # ▲ 追加機能4：無敵状態の発動処理 ▲
+
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -282,12 +367,18 @@ def main():
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
 
+        # ▼ 追加機能4：無敵状態での衝突判定変更 ▼
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
-            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
-            score.update(screen)
-            pg.display.update()
-            time.sleep(2)
-            return
+            if bird.state == "normal": # 通常状態の場合のみゲームオーバー
+                bird.change_img(8, screen)  # こうかとん悲しみエフェクト
+                score.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
+            elif bird.state == "hyper": # 無敵状態の場合、爆弾は消滅しスコア獲得
+                exps.add(Explosion(bomb, 50))
+                score.value += 1
+        # ▲ 追加機能4：無敵状態での衝突判定変更 ▲
 
         bird.update(key_lst, screen)
         beams.update()
