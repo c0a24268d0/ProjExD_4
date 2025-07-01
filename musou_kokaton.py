@@ -100,6 +100,12 @@ class Bird(pg.sprite.Sprite):
             self.dire = tuple(sum_mv)
             self.image = self.imgs[self.dire]
         screen.blit(self.image, self.rect)
+        #  こうかとんの移動速度変更
+        if key_lst[pg.K_LSHIFT] and (sum_mv[0] != 0 or sum_mv[1] != 0): #  左shiftキーが入力されているかつ、こうかとんが動いている
+            move_speed = 20 #  変更後スピード
+        else:
+            move_speed = 10 #  変更されないときのスピード
+        self.speed = move_speed
 
 
 class Bomb(pg.sprite.Sprite):
