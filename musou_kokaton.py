@@ -238,7 +238,7 @@ class Score:
     def __init__(self):
         self.font = pg.font.Font(None, 50)
         self.color = (0, 0, 255)
-        self.value = 0
+        self.value = 400
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         self.rect = self.image.get_rect()
         self.rect.center = 100, HEIGHT-50
@@ -246,6 +246,25 @@ class Score:
     def update(self, screen: pg.Surface):
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
+
+
+class Gravity(pg.sprite.Sprite):
+    """
+    重力場に関するクラス
+    """
+    def __init__(self, life: int = 400):
+        super().__init__()
+        self.image = pg.Surface((WIDTH, HEIGHT))
+        pg.draw.rect(self.image, (0, 0, 0), (0, 0, WIDTH, HEIGHT))
+        self.image.set_alpha(255) 
+        self.rect = self.image.get_rect()
+        self.life = life  
+
+
+    def update(self):
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
 
 
 def main():
@@ -259,6 +278,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravitys = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -294,7 +314,24 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
+        
+        for event in pg.event.get():
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_RETURN and score.value >= 200:
+                    gravitys.add(Gravity())
+                    score.value -= 200  # スコア消費
+        
+        for g in gravitys:
+            for bomb in pg.sprite.spritecollide(g, bombs, True):
+                exps.add(Explosion(bomb, 50))
+                score.value += 1
+            for emy in pg.sprite.spritecollide(g, emys, True):
+                exps.add(Explosion(emy, 100))
+                score.value += 10
+        
 
+        gravitys.update()
+        gravitys.draw(screen)
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
