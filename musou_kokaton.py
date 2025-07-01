@@ -278,7 +278,7 @@ class Shield(pg.sprite.Sprite):
     def update(self):
         self.life -= 1
         if self.life <= 0:
-            self.kill()  # シールドをグループから削除（消える）
+            self.kill()  # シールドを削除
 
 
 def main():
@@ -329,7 +329,7 @@ def main():
             time.sleep(2)
             return
         
-        # シールド発動条件（Sキー & スコア50以上 & シールド未存在）
+        # シールド発動条件
         if key_lst[pg.K_s] and score.value >= 50 and len(shields) == 0:
             shield_life = 400
             shields.add(Shield(shield_life, bird))
