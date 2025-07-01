@@ -72,6 +72,8 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = xy
         self.speed = 10
+        self.state="normal"#追加機能4
+        self.hyper_life=0
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -98,7 +100,14 @@ class Bird(pg.sprite.Sprite):
             self.rect.move_ip(-self.speed*sum_mv[0], -self.speed*sum_mv[1])
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
             self.dire = tuple(sum_mv)
-            self.image = self.imgs[self.dire]
+            if self.state=="normal":
+                self.image = self.imgs[self.dire]
+        if self.state == "hyper":
+            self.hyper_life -= 1
+            self.image = pg.transform.laplacian(self.imgs[self.dire]) 
+            if self.hyper_life < 0:
+                self.state = "normal"
+                self.image = self.imgs[self.dire] 
         screen.blit(self.image, self.rect)
         #  こうかとんの移動速度変更
         if key_lst[pg.K_LSHIFT] and (sum_mv[0] != 0 or sum_mv[1] != 0): #  左shiftキーが入力されているかつ、こうかとんが動いている
@@ -216,6 +225,7 @@ class Enemy(pg.sprite.Sprite):
         self.bound = random.randint(50, HEIGHT//2)  # 停止位置
         self.state = "down"  # 降下状態or停止状態
         self.interval = random.randint(50, 300)  # 爆弾投下インターバル
+        self.interval=1#お遊び
 
     def update(self):
         """
@@ -247,6 +257,17 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class Invisible:
+    def __init__(self):
+        self.font=pg.font.Font(None,50)
+        self.color=(255,0,0)
+        self.value=0
+        self.image = self.font.render(f"Invisible Time: {self.value}", 0, self.color)
+        self.rect = self.image.get_rect()
+        self.rect.center = 400, HEIGHT-50
+    def update(self, screen: pg.Surface):
+        self.image = self.font.render(f"Invisible Time: {self.value}", 0, self.color)
+        screen.blit(self.image, self.rect)
 
 class Gravity(pg.sprite.Sprite):
     """
@@ -272,6 +293,7 @@ def main():
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     bg_img = pg.image.load(f"fig/pg_bg.jpg")
     score = Score()
+    invisible=Invisible()
 
     bird = Bird(3, (900, 400))
     bombs = pg.sprite.Group()
@@ -282,6 +304,7 @@ def main():
 
     tmr = 0
     clock = pg.time.Clock()
+    score.value=500 #デバッグ用
     while True:
         key_lst = pg.key.get_pressed()
         for event in pg.event.get():
@@ -289,7 +312,15 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RSHIFT and score.value>=100: #追加機能4
+                score.value=score.value-100
+                bird.state="hyper"
+                bird.hyper_life=500
+                invisible.value=500
         screen.blit(bg_img, [0, 0])
+
+        if invisible.value!=0:
+            invisible.value=invisible.value-1
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
             emys.add(Enemy())
@@ -309,12 +340,16 @@ def main():
             score.value += 1  # 1点アップ
 
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
-            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
-            score.update(screen)
-            pg.display.update()
-            time.sleep(2)
-            return
-        
+            if bird.state == "normal": # 通常状態
+                bird.change_img(8, screen)  # こうかとん悲しみエフェクト
+                score.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
+            elif bird.state == "hyper": # 無敵状態
+                exps.add(Explosion(bomb, 50))
+                score.value += 1
+
         for event in pg.event.get():
             if event.type == pg.KEYDOWN:
                 if event.key == pg.K_RETURN and score.value >= 200:
@@ -342,6 +377,8 @@ def main():
         exps.update()
         exps.draw(screen)
         score.update(screen)
+        if invisible.value !=0:
+            invisible.update(screen)
         pg.display.update()
         tmr += 1
         clock.tick(50)
